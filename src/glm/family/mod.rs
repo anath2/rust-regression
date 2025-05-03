@@ -1,4 +1,3 @@
-#![allow(non_snake_case)]
 use num::Float;
 use faer::{Mat, MatRef};
 use faer_traits::RealField;
@@ -37,6 +36,7 @@ pub trait Family<T: RealField + Float> : Regression<T> {
     }
 }
 
+
 #[derive(Debug)]
 pub struct Gaussian<T: RealField + Float> {
     pub coefficients: Mat<T>,
@@ -64,6 +64,7 @@ impl<T: RealField + Float> Family<T> for Gaussian<T> {
     }
 }
 
+
 impl<T: RealField + Float> Regression<T> for Gaussian<T> {
     fn fitted_values(&self) -> MatRef<T> {
         self.coefficients.as_ref()
@@ -73,20 +74,14 @@ impl<T: RealField + Float> Regression<T> for Gaussian<T> {
         self.has_bias
     }
 
+    #[allow(non_snake_case)]
     fn fit_unchecked(&mut self, X: MatRef<T>, y: MatRef<T>) {
         let inv_link = |eta: T| self.inv_link(eta);
         let link_deriv = |mu: T| self.link_deriv(mu);
         let variance = |mu: T| self.variance(mu);
 
         if self.has_bias {
-            let (n_rows, n_cols) = (X.nrows(), X.ncols());
-
-            // Add bias
-            let bias = Mat::<T>::ones(n_rows, 1);
-            let mut X_biased = Mat::<T>::zeros(n_rows, n_cols + 1);
-            X_biased.as_mut().submatrix_mut(0, 0, n_rows, n_cols).copy_from(X);
-            X_biased.as_mut().col_mut(n_cols).copy_from(bias.as_ref().col(0));
-
+            let X_biased = self.add_bias(X);
             self.coefficients = irls(
                 X_biased.as_ref(),
                 y,
@@ -122,12 +117,15 @@ impl<T: RealField + Float> Family<T> for Binomial<T> {
     fn link(&self, mu: T) -> T {
         LinkFunction::Logit.link(mu)
     }
+
     fn inv_link(&self, eta: T) -> T {
         LinkFunction::Logit.inv_link(eta)
     }
+
     fn link_deriv(&self, mu: T) -> T {
         LinkFunction::Logit.link_deriv(mu)
     }
+
     fn variance(&self, mu: T) -> T {
         VarianceFunction::Binomial.variance(mu)
     }
@@ -137,19 +135,18 @@ impl<T: RealField + Float> Regression<T> for Binomial<T> {
     fn fitted_values(&self) -> MatRef<T> {
         self.coefficients.as_ref()
     }
+
     fn has_bias(&self) -> bool {
         self.has_bias
     }
+
+    #[allow(non_snake_case)]
     fn fit_unchecked(&mut self, X: MatRef<T>, y: MatRef<T>) {
         let inv_link = |eta: T| self.inv_link(eta);
         let link_deriv = |mu: T| self.link_deriv(mu);
         let variance = |mu: T| self.variance(mu);
         if self.has_bias {
-            let (n_rows, n_cols) = (X.nrows(), X.ncols());
-            let bias = Mat::<T>::ones(n_rows, 1);
-            let mut X_biased = Mat::<T>::zeros(n_rows, n_cols + 1);
-            X_biased.as_mut().submatrix_mut(0, 0, n_rows, n_cols).copy_from(X);
-            X_biased.as_mut().col_mut(n_cols).copy_from(bias.as_ref().col(0));
+            let X_biased = self.add_bias(X);
             self.coefficients = irls(
                 X_biased.as_ref(),
                 y,
@@ -157,7 +154,6 @@ impl<T: RealField + Float> Regression<T> for Binomial<T> {
                 link_deriv,
                 variance
             );
-            println!("Model inputs: {:#?}", X_biased);
             
         } else {
             self.coefficients = irls(
@@ -198,23 +194,23 @@ impl<T: RealField + Float> Family<T> for Poisson<T> {
     }
 }
 
+
 impl<T: RealField + Float> Regression<T> for Poisson<T> {
     fn fitted_values(&self) -> MatRef<T> {
         self.coefficients.as_ref()
     }
+
     fn has_bias(&self) -> bool {
         self.has_bias
     }
+
+    #[allow(non_snake_case)]
     fn fit_unchecked(&mut self, X: MatRef<T>, y: MatRef<T>) {
         let inv_link = |eta: T| self.inv_link(eta);
         let link_deriv = |mu: T| self.link_deriv(mu);
         let variance = |mu: T| self.variance(mu);
         if self.has_bias {
-            let (n_rows, n_cols) = (X.nrows(), X.ncols());
-            let bias = Mat::<T>::ones(n_rows, 1);
-            let mut X_biased = Mat::<T>::zeros(n_rows, n_cols + 1);
-            X_biased.as_mut().submatrix_mut(0, 0, n_rows, n_cols).copy_from(X);
-            X_biased.as_mut().col_mut(n_cols).copy_from(bias.as_ref().col(0));
+            let X_biased = self.add_bias(X);
             self.coefficients = irls(
                 X_biased.as_ref(),
                 y,
@@ -265,19 +261,18 @@ impl<T: RealField + Float> Regression<T> for Gamma<T> {
     fn fitted_values(&self) -> MatRef<T> {
         self.coefficients.as_ref()
     }
+    
     fn has_bias(&self) -> bool {
         self.has_bias
     }
+
+    #[allow(non_snake_case)]
     fn fit_unchecked(&mut self, X: MatRef<T>, y: MatRef<T>) {
         let inv_link = |eta: T| self.inv_link(eta);
         let link_deriv = |mu: T| self.link_deriv(mu);
         let variance = |mu: T| self.variance(mu);
         if self.has_bias {
-            let (n_rows, n_cols) = (X.nrows(), X.ncols());
-            let bias = Mat::<T>::ones(n_rows, 1);
-            let mut X_biased = Mat::<T>::zeros(n_rows, n_cols + 1);
-            X_biased.as_mut().submatrix_mut(0, 0, n_rows, n_cols).copy_from(X);
-            X_biased.as_mut().col_mut(n_cols).copy_from(bias.as_ref().col(0));
+            let X_biased = self.add_bias(X);
             self.coefficients = irls(
                 X_biased.as_ref(),
                 y,
@@ -298,6 +293,7 @@ impl<T: RealField + Float> Regression<T> for Gamma<T> {
 }
 
 #[cfg(test)]
+#[allow(non_snake_case)]
 mod tests {
     use rand::{self, Rng};
     use faer::{Mat, MatRef};
@@ -305,7 +301,7 @@ mod tests {
     use num::Float;
     use crate::regression::Regression;
     use crate::glm::family::{Gaussian, Binomial, LinkFunction, Poisson, Gamma};
-    use rand_distr::{Poisson as PoissonDist, Gamma as GammaDist, Distribution};
+    use rand_distr::{Poisson as PoissonDist, Gamma as GammaDist};
 
     fn make_gaussian_regression_dataset(n_samples: usize) -> (Mat<f64>, Mat<f64>) {
         // Simple linear relation: y = 2x + 1 + noise

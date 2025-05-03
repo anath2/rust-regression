@@ -1,10 +1,11 @@
-#![allow(non_snake_case)]
 use faer::{Mat, MatRef, linalg::solvers::Solve};
 use faer_traits::RealField;
 use std::f64::EPSILON;
 use num::Float;
 
+
 /// Ordinary Least Squares using QR decomposition
+#[allow(non_snake_case)]
 pub fn ols_qr<T: RealField + Float>(
     X: MatRef<T>, 
     y: MatRef<T>,
@@ -14,6 +15,9 @@ pub fn ols_qr<T: RealField + Float>(
     return XtX.col_piv_qr().solve(Xt * y)
 }
 
+
+/// Weighted Least Squares using QR decomposition
+#[allow(non_snake_case)]
 pub fn weighted_lstq<T: RealField + Float>(
     X: MatRef<T>,
     y: MatRef<T>,
@@ -32,7 +36,9 @@ pub fn weighted_lstq<T: RealField + Float>(
     return (Xt * Diag.as_ref() * X).col_piv_qr().solve(Xt * Diag.as_ref() * y);    
 }
 
+
 /// Iteratively Reweighted Least Squares (IRLS) solver for GLMs.
+#[allow(non_snake_case)]
 pub fn irls<T, ILF, LDF, VF>(
     X: MatRef<T>,
     y: MatRef<T>,

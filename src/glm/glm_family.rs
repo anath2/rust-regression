@@ -1,6 +1,4 @@
 use super::functions::{LinkFunction, VarianceFunction};
-use faer_traits::RealField;
-use num::Float;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum GLMFamily {

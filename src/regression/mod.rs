@@ -1,4 +1,3 @@
-#![allow(non_snake_case)]
 pub mod errors;
 pub mod solvers;
 
@@ -7,7 +6,6 @@ use num::Float;
 use faer::{Mat, MatRef};
 use faer_traits::RealField;
 use errors::RegressionErrors;
-
 
 
 pub trait Regression<T: RealField + Float> {
@@ -23,6 +21,17 @@ pub trait Regression<T: RealField + Float> {
         } else {
             T::zero()
         }
+    }
+
+    #[allow(non_snake_case)]
+    fn add_bias(&self, X: MatRef<T>) -> Mat<T> {
+        let (n_rows, n_cols) = (X.nrows(), X.ncols());
+        // A column of ones as the initial bias value
+        let bias = Mat::<T>::ones(n_rows, 1);
+        let mut X_biased = Mat::<T>::zeros(n_rows, n_cols + 1);
+        X_biased.as_mut().submatrix_mut(0, 0, n_rows, n_cols).copy_from(X);
+        X_biased.as_mut().col_mut(n_cols).copy_from(bias.as_ref().col(0));
+        X_biased
     }
 
     /// Returns true if the model has been fit, false otherwise. 
@@ -44,7 +53,8 @@ pub trait Regression<T: RealField + Float> {
     /// Returns the coefficients of the model. 
     /// This is the same as the fitted values, but without the bias term if present. 
     fn coefficients(&self) -> MatRef<T> {
-        if self.has_bias() && self.bias().abs() > T::epsilon() {
+        if self.has_bias() {
+            // Last rows is the bias term
             let n = self.fitted_values().nrows() - 1;
             self.fitted_values().get(0..n, ..)
         } else {
@@ -64,8 +74,11 @@ pub trait Regression<T: RealField + Float> {
         }
     }
 
+    #[allow(non_snake_case)]
     fn fit_unchecked(&mut self, X: MatRef<T>, y: MatRef<T>);
 
+
+    #[allow(non_snake_case)]
     fn fit(&mut self, X: MatRef<T>, y: MatRef<T>) -> Result<(), RegressionErrors> {
         if X.nrows() != y.nrows() {
             return Err(RegressionErrors::DimensionMismatch);
@@ -76,6 +89,7 @@ pub trait Regression<T: RealField + Float> {
         Ok(())
     }
 
+    #[allow(non_snake_case)]
     fn predict(&self, X: MatRef<T>) -> Result<Mat<T>, RegressionErrors> {
         if X.ncols() != self.coefficients().nrows() {
             Err(RegressionErrors::DimensionMismatch)
@@ -84,6 +98,7 @@ pub trait Regression<T: RealField + Float> {
         } else {
             let mut result = X * self.coefficients();
             let bias = self.bias();
+
             if self.has_bias() && self.bias().abs() > T::epsilon() {
                 // Add the bias term
                 for i in 0..result.nrows() {
@@ -94,9 +109,5 @@ pub trait Regression<T: RealField + Float> {
             Ok(result)
         }
     }
-
-
-
-
 }
 
