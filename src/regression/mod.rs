@@ -85,11 +85,10 @@ pub trait Regression<T: RealField + Float> {
             let mut result = X * self.coefficients();
             let bias = self.bias();
             if self.has_bias() && self.bias().abs() > T::epsilon() {
-                unsafe {
-                    // Add the bias term
-                    for i in 0..result.nrows() {
-                        *result.get_mut_unchecked(i, 0) = *result.get_mut_unchecked(i, 0) + bias;
-                    }
+                // Add the bias term
+                for i in 0..result.nrows() {
+                    let entry = result.get_mut(i, 0);
+                    *entry = *entry + bias;
                 }
             }
             Ok(result)
