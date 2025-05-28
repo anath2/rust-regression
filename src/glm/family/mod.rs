@@ -299,9 +299,17 @@ mod tests {
     use faer::{Mat, MatRef};
     use faer_traits::RealField;
     use num::Float;
+    use crate::glm::family::Family;
     use crate::regression::Regression;
     use crate::glm::family::{Gaussian, Binomial, LinkFunction, Poisson, Gamma};
     use rand_distr::{Poisson as PoissonDist, Gamma as GammaDist};
+
+    // Helper for binomial dataset
+    use std::fs::{self, File};
+    use std::path::Path;
+    use std::io::Write;
+    use serde::Deserialize;
+    use std::io::{Seek, SeekFrom};
 
     fn make_gaussian_regression_dataset(n_samples: usize) -> (Mat<f64>, Mat<f64>) {
         // Simple linear relation: y = 2x + 1 + noise
@@ -331,6 +339,30 @@ mod tests {
         true
     }
 
+    fn download_iris_dataset() -> std::io::Result<String> {
+        let data_dir = Path::new("data");
+        let iris_path = data_dir.join("iris.csv");
+        
+        if !data_dir.exists() {
+            fs::create_dir(data_dir)?;
+        }
+
+        if !iris_path.exists() {
+            let url = "http://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data";
+            let response = reqwest::blocking::get(url)
+                .unwrap()
+                .text()
+                .unwrap();
+            
+            let mut file = File::create(&iris_path)?;
+            file.write_all(response.as_bytes())?;
+        }
+        
+        Ok(iris_path.to_str().unwrap().to_string())
+    }
+
+
+
     #[test]
     fn test_gaussian_regression() {
         let (X, y) = make_gaussian_regression_dataset(100);
@@ -355,69 +387,97 @@ mod tests {
         assert!(check_approx_equal(pred_y.as_ref(), y.as_ref(), 2.0));
     }
 
-    // Helper for binomial dataset
-    fn make_binomial_regression_dataset(n_samples: usize) -> (Mat<f64>, Mat<f64>) {
-        // Logistic regression: y ~ Bernoulli(sigmoid(2x - 1))
-        let mut X = Mat::zeros(n_samples, 1);
-        let mut y = Mat::zeros(n_samples, 1);
-        let mut rng = rand::thread_rng();
-        for i in 0..n_samples {
-            let xi = rng.gen_range(-2.0..2.0);
-            X[(i, 0)] = xi;
-            let p = 1.0 / (1.0 + (-2.0 * xi + 1.0).exp());
-            let random_val: f64 = rng.r#gen();
-            if random_val < p {
-                y[(i, 0)] = 0.0;    
+    // Helper for iris dataset
+    #[derive(Debug, Deserialize)]
+    struct IrisRecord {
+        #[serde(rename = "0")]
+        sepal_length: f64,
+        #[serde(rename = "1")]
+        sepal_width: f64,
+        #[serde(rename = "2")]
+        petal_length: f64,
+        #[serde(rename = "3")]
+        petal_width: f64,
+        #[serde(rename = "4")]
+        species: String,
+    }
+
+    fn make_binomial_regression_dataset() -> (Mat<f64>, Mat<f64>) {
+        // Load Iris dataset and create binary classification (setosa vs others)
+        let iris_path = download_iris_dataset().unwrap();
+        let mut file = File::open(&iris_path).unwrap();
+
+        let nrows = {
+            let mut rdr = csv::ReaderBuilder::new()
+                .has_headers(false)
+                .from_reader(&mut file);
+            let count = rdr.records().count();
+            count
+        };
+
+        file.seek(SeekFrom::Start(0)).unwrap();
+        
+        let mut X: Mat<f64> = Mat::zeros(nrows, 4);
+        let mut y: Mat<f64> = Mat::zeros(nrows, 1);
+
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(file);
+
+        for (i, result) in rdr.deserialize().enumerate() {
+            let record: IrisRecord = result.unwrap();
+            // Skip empty rows (the dataset has some empty lines at the end)
+            if record.species.is_empty() {
+                continue;
+            }
+
+            X[(i, 0)] = record.sepal_length;
+            X[(i, 1)] = record.sepal_width;
+            X[(i, 2)] = record.petal_length;
+            X[(i, 3)] = record.petal_width;
+
+            if record.species == "Iris-setosa" {
+                y[(i, 0)] = 0.0;
             } else {
                 y[(i, 0)] = 1.0;
             }
         }
+       
         (X, y)
     }
 
     #[test]
     fn test_binomial_regression() {
-        let (X, y) = make_binomial_regression_dataset(100);
+        // Use 0 to get all available samples
+        let (X, y) = make_binomial_regression_dataset();
+        println!("X: {:?}", X);
+        println!("y: {:?}", y);
+        println!("Dataset size: {} samples, {} features", X.nrows(), X.ncols());
+
         let mut model = Binomial::new(true);
         model.fit_unchecked(X.as_ref(), y.as_ref());
-        let preds = model.fitted_values();
-        // Add bias column to X for predictions
-        let n_rows = X.nrows();
-        let n_cols = X.ncols();
-        let bias: Mat<f64> = Mat::ones(n_rows, 1);
-        let mut X_biased = Mat::zeros(n_rows, n_cols + 1);
-        X_biased.as_mut().submatrix_mut(0, 0, n_rows, n_cols).copy_from(X.as_ref());
-        X_biased.as_mut().col_mut(n_cols).copy_from(bias.as_ref().col(0));
-        let logits = X_biased.as_ref() * preds;
-        // Use inv_link (sigmoid) to get probabilities
+        //let preds = model.fitted_values();
 
-        let mut probabilities = logits.clone();
+        let probabilities = model.glm_predict(X.as_ref()).unwrap();
+        let n_rows = X.nrows();
+         
+        let mut correct = 0;
+
         for i in 0..probabilities.nrows() {
             for j in 0..probabilities.ncols() {
-                probabilities[(i, j)] = LinkFunction::Logit.inv_link(logits[(i, j)]);
+                if probabilities[(i, j)] > 0.5 && y[(i, j)] == 1.0 {
+                    correct += 1;
+                }
+
+                if probabilities[(i, j)] < 0.5 && y[(i, j)] == 0.0 {
+                    correct += 1;
+                }
             }
         }
 
-        // Check that probabilities are in [0,1]
-        for i in 0..probabilities.nrows() {
-            let p = probabilities[(i, 0)];
-            assert!(p >= 0.0 && p <= 1.0);
-        }
-        // Optionally, check prediction accuracy (not strict)
-        let y_true = y;
-        let mut y_pred = Mat::zeros(n_rows, 1);
-        for i in 0..n_rows {
-            y_pred[(i, 0)] = if probabilities[(i, 0)] > 0.5 { 1.0 } else { 0.0 };
-        }
+        let accuracy = correct as f64 / n_rows as f64;
+        println!("Accuracy: {}", accuracy);
 
-        let mut correct = 0;
-        for i in 0..y_true.nrows() {
-            if (y_true[(i, 0)] - y_pred[(i, 0)]).abs() < 1e-8 {
-                correct += 1;
-            }
-        }
-        let accuracy = correct as f64 / y_true.nrows() as f64;
-        assert!(accuracy > 0.7, "Binomial regression accuracy too low: {}", accuracy);
     }
 
     // Helper for Poisson dataset

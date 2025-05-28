@@ -7,6 +7,10 @@ edition = "2024"
 faer = "0.22"
 faer-traits = "0.22"
 num = "0.4.1"
+csv = "1.1"
+serde = { version = "1.0", features = ["derive"] }
+reqwest = { version = "0.12", features = ["blocking"] }
+
 
 [dev-dependencies]
 rand = "0.8"
